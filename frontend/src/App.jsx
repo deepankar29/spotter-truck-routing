@@ -165,7 +165,7 @@ export default function App() {
             </div>
             <div>
               <p className="text-lg font-black tracking-tight text-white flex items-center gap-1">
-                spotter<span className="text-cyan-400">.</span>ai
+                spotter<span className="text-cyan-400">.</span>routing
               </p>
               <p className="text-[10px] uppercase font-bold tracking-[.2em] text-slate-400">
                 Weather-Aware Truck Routing
@@ -523,14 +523,14 @@ export default function App() {
         {/* Footer */}
         <footer className="mt-10 border-t border-slate-800 py-6 text-center text-xs text-slate-500 flex flex-wrap items-center justify-between gap-4">
           <p>
-            Spotter AI — Weather-Aware Truck Routing Assessment Prototype.
+            Spotter — Weather-Aware Commercial Truck Routing Engine.
           </p>
           <div className="flex items-center gap-4 text-slate-400">
             <button
               onClick={() => setShowRulesModal(true)}
               className="hover:text-cyan-300 transition"
             >
-              Assessment Risk Rules Table
+              Road Weather Risk Thresholds
             </button>
             <span>•</span>
             <span>Mapbox & Open-Meteo APIs</span>
@@ -538,14 +538,14 @@ export default function App() {
         </footer>
       </main>
 
-      {/* Assessment Risk Rules Modal */}
+      {/* Road Weather Risk Rules Modal */}
       {showRulesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-2xl rounded-2xl border border-slate-700 bg-[#0b192a] p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="text-cyan-300" size={20} />
-                <h3 className="text-lg font-bold text-white">Assessment Weather Risk Rules</h3>
+                <h3 className="text-lg font-bold text-white">Road Weather Risk Thresholds</h3>
               </div>
               <button
                 onClick={() => setShowRulesModal(false)}
