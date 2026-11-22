@@ -4,6 +4,10 @@ A production-grade **React + Django** web application engineered for truck drive
 
 Built strictly according to the **Spotter Full Stack Developer: Weather-Aware Truck Routing** assessment specification.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/deepankar29/spotter-truck-routing)
+&nbsp;
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/deepankar29/spotter-truck-routing&root-directory=frontend)
+
 ---
 
 ## Assessment Requirements & Compliance Matrix
