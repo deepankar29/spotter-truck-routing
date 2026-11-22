@@ -100,6 +100,17 @@ def plan_routes(request):
         # Generate corridor forecast for the recommended route for the 0–48h slider & heatmap
         heatmap = fetch_hourly_corridor_forecast(planned[0]["checkpoints"], load_weight_lb=load)
 
+        any_simulated = any(
+            p.get("is_simulated")
+            for r in planned
+            for p in r.get("checkpoints", [])
+        )
+        notices = []
+        if len(planned) < 3:
+            notices.append(f"Mapbox returned {len(planned)} route option(s) for this journey.")
+        if any_simulated:
+            notices.append("Open-Meteo rate limit reached from cloud server IP; using corridor weather simulation model.")
+
         return Response({
             "routes": planned,
             "recommended_route_id": planned[0]["id"],
@@ -108,7 +119,7 @@ def plan_routes(request):
             "checkpoint_interval_miles": interval,
             "load_weight_lb": load,
             "route_count": len(planned),
-            "notice": None if len(planned) == 3 else f"Mapbox returned {len(planned)} route option(s) for this journey.",
+            "notice": " · ".join(notices) if notices else None,
         })
 
     except KeyError as exc:
