@@ -1,127 +1,102 @@
-# Spotter AI — Weather-Aware Truck Routing
+# Weather-Aware Truck Routing
 
-A production-grade **React + Django** web application engineered for truck drivers and fleet dispatchers to select the safest highway routes based on real-time and forecasted weather, cargo load weight, checkpoint sampling, and lexicographical risk optimization.
-
-Built strictly according to the **Spotter Full Stack Developer: Weather-Aware Truck Routing** assessment specification.
+A full-stack dispatch and navigation tool that helps commercial truck drivers and fleet operators evaluate driving routes based on weather forecasts, vehicle cargo weight, and road exposure risk.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/deepankar29/spotter-truck-routing)
-&nbsp;
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/deepankar29/spotter-truck-routing&root-directory=frontend)
 
 ---
 
-## Assessment Requirements & Compliance Matrix
+## Overview
 
-| Requirement | Specification | Implementation in Repository | Status |
-|---|---|---|:---:|
-| **User Inputs** | Origin & Destination | Autocomplete search via Mapbox Geocoding (`PlaceInput.jsx`) + 1-click test corridor presets | **100%** |
-| | Departure Date/Time | `datetime-local` input serialized with ISO 8601 timezone offset | **100%** |
-| | Load Weight (lb) | Numeric input with dynamic classification badge (Standard / Medium / Heavy) | **100%** |
-| | Checkpoint Interval | 10 / 25 / 50 miles selector | **100%** |
-| **Route Generation** | Generate 3 route options using a routing API | Mapbox Directions API with `alternatives=true` (`route_service.py`) | **100%** |
-| **Weather Sampling** | Sample every 10 / 25 / 50 miles using truck arrival ETA | Haversine distance interpolation along GeoJSON geometry. Matches estimated arrival time to Open-Meteo hourly forecast. | **100%** |
-| **Weather Risk Rules** | Wind, Rain, Snow classification table | Strict threshold boundaries implemented in `risk/engine.py` | **100%** |
-| **Load Rules** | $\ge 55$ mph $\rightarrow$ No Travel<br>$45\text{--}54$ mph $+ >30\text{k}$ lb $\rightarrow$ No Travel<br>$35\text{--}44$ mph $+ >40\text{k}$ lb $\rightarrow$ Severe | Implemented with exact condition evaluation and detailed reason generation | **100%** |
-| **Recommendation** | 1. Fewest Severe miles<br>2. Fewest High miles<br>3. Lowest average risk<br>4. Shortest travel times | Lexicographical tuple sort key in `risk/engine.py` with No-Travel prioritization | **100%** |
-| **Map & Heatmap** | All routes, checkpoints, risk levels, ETAs, summaries | Interactive Mapbox GL JS map with route switching, active glow, and checkpoint popup cards | **100%** |
-| | Corridor heatmap with 0–48h slider | Native Mapbox GL JS `heatmap` layer beneath route lines with dynamic 0–48h hourly simulation & auto-play loop | **100%** |
-| **Test Suite** | Unit tests for risk, weather, and routing | 16 comprehensive unit tests passing with 100% green status | **100%** |
+Adverse weather—especially high crosswinds, heavy snowfall, and torrential rain—is a leading cause of commercial vehicle accidents, rollovers, and transit delays. Standard consumer routing engines only optimize for distance and traffic, ignoring weather hazards and gross vehicle weight dynamics.
+
+This application bridges that gap by:
+1. Generating up to three alternative driving routes between any origin and destination using Mapbox Directions.
+2. Sampling weather conditions along each route at discrete mileage intervals (10, 25, or 50 miles) synchronized to the truck's estimated time of arrival (ETA) at each checkpoint via Open-Meteo.
+3. Calculating localized road risk using vehicle load weight and condition-specific thresholds.
+4. Lexicographically ranking routes to prioritize safety first, then travel efficiency.
+5. Visualizing trip corridor weather conditions with an interactive 48-hour forecast timeline and continuous heatmap layer.
 
 ---
 
-## Architecture & Data Flow
+## Core Features
+
+- **Multi-Route Comparison**: Retrieves up to three alternative driving routes from Mapbox Directions API with distance, duration, and turn geometry.
+- **ETA-Synchronized Weather**: Queries hourly forecasts matching the truck's scheduled arrival time at every checkpoint along the route.
+- **Load-Aware Risk Engine**: Evaluates wind, rain, and snow intensity while adjusting safety thresholds for loaded vs. heavy commercial haulers.
+- **Corridor Heatmap & 48h Timeline**: Interactive Mapbox GL JS heatmap layer visualizing weather risk across the corridor with a 0–48 hour forecast slider and simulation playback.
+- **Segment-Level Attribution**: Employs 1D Voronoi midpoint partitioning so that origin departure conditions and intermediate waypoints are proportionally weighted in the total risk score.
+- **Checkpoint Inspection Drawer**: Filterable breakdown (All, Alerts, Severe) providing mile markers, ETAs, condition metrics, and governing risk drivers.
+
+---
+
+## Risk Model & Logic
+
+### Condition Thresholds
+
+Weather conditions at each checkpoint are categorized into five severity levels based on meteorological metrics:
+
+| Severity Level | Wind Speed | Rainfall Rate | Snowfall Rate |
+|---|---|---|---|
+| **Low** | < 25 mph | < 0.10 in/hr | < 0.5 in/hr |
+| **Moderate** | 25 – 34 mph | 0.10 – 0.25 in/hr | 0.5 – 1.0 in/hr |
+| **High** | 35 – 44 mph | 0.25 – 0.50 in/hr | 1.0 – 2.0 in/hr |
+| **Severe** | 45 – 54 mph | 0.50 – 1.00 in/hr | 2.0 – 3.0 in/hr |
+| **No Travel** | ≥ 55 mph | > 1.00 in/hr | > 3.0 in/hr |
+
+### Vehicle Load Rules
+
+Crosswinds present significantly higher rollover hazards depending on truck gross vehicle weight. The engine enforces the following vehicle dynamics overrides:
+
+- **Wind ≥ 55 mph**: Classified as **No Travel** for all vehicle weights.
+- **Wind 45 – 54 mph with cargo weight > 30,000 lb**: Escalated to **No Travel**.
+- **Wind 35 – 44 mph with cargo weight > 40,000 lb**: Escalated to **Severe**.
+
+### Route Ranking Methodology
+
+Routes are evaluated and sorted using a four-tier lexicographical preference order:
+
+1. **Fewest No-Travel & Severe Miles**: Minimizes highway segments exposed to critical conditions.
+2. **Fewest High-Risk Miles**: Minimizes stretches with elevated wind or precipitation.
+3. **Lowest Weighted Average Risk**: Computes average segment-weighted risk across the total trip distance.
+4. **Shortest Travel Duration**: Selects the fastest path when safety profiles are equivalent.
+
+---
+
+## Architecture & Tech Stack
 
 ```
-[ Truck Driver / User ]
-         │
-         ▼
-[ React + Vite Frontend (Tailwind CSS, Mapbox GL JS) ]
-   • PlaceInput (Geocoding autocomplete)
-   • RouteMap (Polylines + Mapbox Heatmap Layer + Checkpoint markers)
-   • WeatherTimeline (0–48h forecast slider + Play/Pause animation)
-   • CheckpointList (Filter by All / Alerts / High & Severe)
-         │  POST /api/plan/
-         ▼
-[ Django REST Framework Backend ]
-   ├── routing/route_service.py
-   │     └── Calls Mapbox Directions API -> generates up to 3 routes
-   │     └── Samples checkpoints every 10/25/50 miles with Voronoi segment partitioning
-   ├── weather/service.py
-   │     └── Queries Open-Meteo hourly forecast (wind_speed_10m, rain, snowfall)
-   │     └── Matches checkpoint ETA to UTC hourly forecast buckets
-   │     └── Generates 0–48h trip corridor forecast points for the heatmap
-   └── risk/engine.py
-         └── Classifies wind, rain, and snow conditions
-         └── Applies load weight rules (>30,000 lb, >40,000 lb)
-         └── Computes route exposure summaries and lexicographical ranking
+[ Frontend: React 18 + Vite ]
+   ├── Mapbox GL JS (Vector mapping, route geometries, native heatmap layer)
+   ├── Tailwind CSS v4 (Modern responsive interface)
+   └── Lucide React (Visual telemetry icons)
+          │  REST JSON
+          ▼
+[ Backend: Django 5 + Django REST Framework ]
+   ├── routing/     Mapbox Directions client & Voronoi checkpoint sampler
+   ├── weather/     Open-Meteo multi-point hourly forecast service
+   └── risk/        Pure business logic: threshold classification & route ranking
 ```
 
 ---
 
-## Risk Rules & Load Engine
-
-### 1. Condition Thresholds
-
-| Condition | Low | Moderate | High | Severe | No Travel |
-|---|:---:|:---:|:---:|:---:|:---:|
-| **Wind** | $<25$ mph | $25\text{--}34$ mph | $35\text{--}44$ mph | $45\text{--}54$ mph | $\ge 55$ mph |
-| **Rain** | $<0.10$ in/hr | $0.10\text{--}0.25$ in/hr | $0.25\text{--}0.50$ in/hr | $0.50\text{--}1.00$ in/hr | $>1.00$ in/hr |
-| **Snow** | $<0.5$ in/hr | $0.5\text{--}1.0$ in/hr | $1.0\text{--}2.0$ in/hr | $2.0\text{--}3.0$ in/hr | $>3.0$ in/hr |
-
-### 2. Truck Load Rules
-
-- $\ge 55$ mph wind $\rightarrow$ **No Travel** for any load weight.
-- $45\text{--}54$ mph wind $+ >30,000$ lb load $\rightarrow$ **No Travel**.
-- $35\text{--}44$ mph wind $+ >40,000$ lb load $\rightarrow$ **Severe**.
-
-### 3. Route Recommendation Preference
-
-Routes are evaluated and sorted using Python's native lexicographical tuple comparison:
-```python
-def route_sort_key(route):
-    summary = route["summary"]
-    return (
-        summary.get("no_travel_miles", 0.0), # Highest safety priority
-        summary["severe_miles"],             # Preference 1: Fewest Severe miles
-        summary["high_miles"],               # Preference 2: Fewest High miles
-        summary["average_risk"],             # Preference 3: Lowest average risk
-        summary["duration_seconds"],         # Preference 4: Shortest travel times
-    )
-```
-
-### 4. Segment Mileage Attribution (Voronoi Partitioning)
-
-Rather than attributing 0 miles to the origin checkpoint, the checkpoint generation algorithm uses 1D Voronoi mid-point partitioning:
-- Checkpoint $0$ represents $[0, \frac{d_1 - d_0}{2}]$
-- Checkpoint $i$ represents $[\frac{d_i - d_{i-1}}{2}, \frac{d_{i+1} - d_i}{2}]$
-- Checkpoint $n-1$ represents $[\frac{d_{n-1} - d_{n-2}}{2}, d_{n-1}]$
-
-This guarantees that:
-1. Every checkpoint (including the departure point) receives a fair proportional segment weight.
-2. The sum of all segment miles is **identically equal to total route distance**.
-3. Hazardous departure weather is accurately represented in the route's risk exposure.
-
----
-
-## Quick Start Guide
+## Getting Started
 
 ### Prerequisites
-- Node.js 18+
+
+- Node.js 18+ and npm
 - Python 3.10+
-- Mapbox access token (Public token for frontend, secret or public token for backend)
+- Mapbox access token ([mapbox.com](https://www.mapbox.com/))
 
----
-
-### Step 1: Backend Setup (Django)
+### 1. Backend Setup
 
 ```bash
 cd backend
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
 
-# Activate virtual environment
-# Windows PowerShell:
+# Windows:
 .venv\Scripts\Activate.ps1
 # macOS / Linux:
 source .venv/bin/activate
@@ -130,30 +105,28 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # Configure environment variables
-copy .env.example .env   # On macOS/Linux use: cp .env.example .env
+cp .env.example .env
 ```
 
-Edit `backend/.env`:
+Set your configuration in `backend/.env`:
 ```env
-DJANGO_SECRET_KEY=dev-secret-key-replace-in-production
+DJANGO_SECRET_KEY=your-secret-key
 DJANGO_DEBUG=True
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
-MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
+MAPBOX_ACCESS_TOKEN=your_mapbox_token
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```
 
-Run migrations and start server:
+Run database migrations and start the development server:
 ```bash
 python manage.py migrate
 python manage.py runserver
 ```
-Backend runs at `http://127.0.0.1:8000`.
+The API will be available at `http://127.0.0.1:8000/api/`.
 
----
+### 2. Frontend Setup
 
-### Step 2: Frontend Setup (React + Vite)
-
-In a new terminal:
+In a separate terminal:
 ```bash
 cd frontend
 
@@ -161,87 +134,47 @@ cd frontend
 npm install
 
 # Configure environment variables
-copy .env.example .env   # On macOS/Linux use: cp .env.example .env
+cp .env.example .env
 ```
 
-Edit `frontend/.env`:
+Set your public token in `frontend/.env`:
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000/api
-VITE_MAPBOX_ACCESS_TOKEN=pk.your_mapbox_public_token_here
+VITE_MAPBOX_ACCESS_TOKEN=pk.your_mapbox_public_token
 ```
 
-Start Vite dev server:
+Start the Vite development server:
 ```bash
 npm run dev
 ```
-Open `http://localhost:5173`.
+Open `http://localhost:5173` in your browser.
 
 ---
 
-## Running Backend Unit Tests
+## Testing
 
-The backend includes 16 unit tests covering:
-- Wind, rain, and snow threshold classifications
-- Heavy and medium load weight overrides
-- Dominant condition resolution and reason generation
-- Route summary calculations and Voronoi segment weight preservation
-- Lexicographical route sorting with ties and overrides
-- Haversine distance and coordinate interpolation along routes
-- Open-Meteo unit conversions and ETA forecast matching
-- API health and input validation endpoints
+The backend includes a comprehensive test suite covering threshold logic, load weight overrides, distance calculations, and API validation:
 
-Run the full test suite:
 ```bash
 cd backend
 python manage.py test risk routing weather
 ```
 
-Expected output:
+---
+
+## Docker Deployment
+
+Build and run the entire stack with Docker Compose:
+
+```bash
+MAPBOX_ACCESS_TOKEN=your_token docker compose up --build
 ```
-Ran 16 tests in 0.026s
-OK
-```
+
+- Web App: `http://localhost:5173`
+- Backend API: `http://localhost:8000/api/`
 
 ---
 
-## Cloud Deployment Guide
+## License
 
-### Option 1: Render (1-Click via `render.yaml`)
-
-This repository includes a root `render.yaml` blueprint defining:
-1. `spotter-routing-backend`: Python web service with automatic Gunicorn start command and migrations.
-2. `spotter-routing-frontend`: Static site serving Vite production build (`frontend/dist`) with client-side SPA routing rewrites.
-
-To deploy:
-1. Push repository to GitHub.
-2. In the Render Dashboard, click **New +** $\rightarrow$ **Blueprint**.
-3. Select this repo; provide your `MAPBOX_ACCESS_TOKEN` and `VITE_MAPBOX_ACCESS_TOKEN`.
-4. Deploy!
-
-### Option 2: Railway or Fly.io (Backend) + Vercel (Frontend)
-
-- **Frontend on Vercel**: Import the `frontend` folder. `vercel.json` rewrite configuration is pre-configured. Add `VITE_API_BASE_URL` and `VITE_MAPBOX_ACCESS_TOKEN` in Vercel project settings.
-- **Backend on Railway**: Deploy `backend` folder. The included `Procfile` executes Gunicorn. Set environment variables in the Railway dashboard.
-
----
-
-## 5–10 Minute Loom Walkthrough Script
-
-Use this structured script when recording the evaluation walkthrough video:
-
-| Time | Section | Script / Actions to Perform |
-|---|---|---|
-| **0:00 – 1:00** | **Introduction & Problem Statement** | • Introduce yourself and the project: *"Weather-Aware Truck Routing for Spotter."*<br>• Show the clean dashboard UI and explain the goal: helping truck drivers choose the safest route balancing weather risk, load weight, and travel time.<br>• Mention the stack: React, Vite, Tailwind CSS, Mapbox GL JS, Django REST Framework, Mapbox Directions, Open-Meteo. |
-| **1:00 – 2:30** | **Trip Configuration & Presets** | • Click one of the test corridor presets (e.g. *Denver $\rightarrow$ Colorado Springs* or *Chicago $\rightarrow$ Minneapolis*).<br>• Demonstrate the Mapbox Geocoding autocomplete in `PlaceInput`.<br>• Show the departure date/time picker (with timezone offset) and load weight input.<br>• Highlight the 10 / 25 / 50 mile interval toggle.<br>• Click **Calculate Safest Routes** and observe the loading spinner and smooth API response. |
-| **2:30 – 4:00** | **Route Alternatives & Recommendation Logic** | • Show the 3 generated route options on the left and how the active route is illuminated in electric cyan on the map.<br>• Explain the **lexicographical preference order**: 1. Fewest Severe miles, 2. Fewest High miles, 3. Lowest average risk, 4. Shortest travel times.<br>• Point out the *Recommended* badge on the winning route.<br>• Change the load weight from `25,000 lb` to `45,000 lb` and explain the load rules: 35–44 mph wind becomes Severe for loads $>40\text{k}$ lb, and 45–54 mph wind becomes No Travel for loads $>30\text{k}$ lb. |
-| **4:00 – 6:00** | **Corridor Weather Heatmap & 0–48h Forecast Slider** | • Zoom in on the map and showcase the **true Mapbox GL JS `heatmap` layer** flowing along the trip corridor beneath the route line.<br>• Toggle Heatmap metric between *Risk*, *Wind*, and *Rain* using the map toolbar.<br>• Drag the **0–48 Hour Forecast Slider** and watch the heatmap intensity and corridor average metrics update in real-time.<br>• Click the **Play Loop** button to demonstrate the auto-play simulation of the weather front moving across the 48-hour timeline.<br>• Toggle inspection mode between *ETA Time* and *Slider Hour*. Click any checkpoint marker to open its rich popup card. |
-| **6:00 – 7:30** | **Checkpoint Weather Analysis Drawer** | • Expand the *Checkpoint Weather Analysis* section.<br>• Demonstrate the filters: *All*, *Alerts (Mod+)*, and *High / Severe*.<br>• Show checkpoint details: exact mile, Voronoi segment span, ETA, wind, rain, snow, and the clear governing explanation reason. |
-| **7:30 – 8:45** | **Code Architecture & Test Suite** | • Switch to the terminal / code editor.<br>• Show the modular structure: `risk/engine.py`, `routing/route_service.py`, `weather/service.py`.<br>• Run `python manage.py test risk routing weather` live to show **all 16 unit tests passing**.<br>• Highlight the Voronoi segment calculation that ensures origin weather at Mile 0 is not dropped. |
-| **8:45 – 9:30** | **Conclusion & Wrap-Up** | • Summarize: All core requirements from the PDF are met 100% with priority on correctness, clarity, and safety.<br>• Show GitHub repo link and live deployment URL.<br>• Conclude walkthrough. |
-
----
-
-## Author & License
-
-Built for the **Spotter AI Full Stack Developer** Assessment.  
-Licensed under the MIT License.
+This project is licensed under the MIT License.
